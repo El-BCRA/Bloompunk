@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: 8166e36031e9fcc4eb3505699941257d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - enemyData: {instanceID: 0}
+  - initialState: {instanceID: 0}
+  - navMeshAgent: {instanceID: 0}
+  - enemyRigidBody: {instanceID: 0}
+  - _onEnemySpawn: {fileID: 11400000, guid: 74771b1c60ffcc048b9448d99692e173, type: 2}
+  - _onEnemyDeath: {fileID: 11400000, guid: c37c16440a057714b9e8fc0835c5221b, type: 2}
+  - _onEnemySelfDestruct: {fileID: 11400000, guid: 7b14f028f253afb4a9a02e97f59ec56b,
+      type: 2}
+  - visibilityCP: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
