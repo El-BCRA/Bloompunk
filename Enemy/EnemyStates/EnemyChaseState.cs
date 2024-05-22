@@ -1,6 +1,7 @@
 using Sirenix.OdinInspector;
 using System.Collections;
 using System.Collections.Generic;
+using ScriptableObjectArchitecture;
 using UnityEngine;
 using UnityEngine.AI;
 using Utilities.StateMachine;
@@ -14,15 +15,9 @@ namespace Bloompunk
         private Transform _chaseTarget;
         private float _distToPlayer;
 
-        public override bool CheckStateChanges()
-        {
-            if (_distToPlayer < _owner.enemyData.AttackRadius)
-            {
-                Parent.ChangeState(postChaseState.GetType());
-                return true;
-            }
-            return false;
-        }
+        private bool _nearby;
+        [SerializeField] private GameObjectGameEvent _onNearby;
+        [SerializeField] private GameObjectGameEvent _onNotNearby;
 
         public override void Enter()
         {
@@ -32,12 +27,6 @@ namespace Bloompunk
             {
                 BoidManager.Instance.boids.Add(this._owner);
                 _owner.enemyRigidBody.isKinematic = false;
-                // _owner.navMeshAgent.enabled = false;
-            } else
-            {
-                // _owner.navMeshAgent.enabled = true;
-                // _owner.navMeshAgent.speed = _owner.enemyData.WalkSpeed;
-                // _owner.navMeshAgent.angularSpeed = _owner.enemyData.RotationSpeed;
             }
 
             _chaseTarget = Player.Instance.transform;
@@ -46,27 +35,41 @@ namespace Bloompunk
 
         public override void Exit()
         {
-            if (_owner.isBoid)
-            {
-                BoidManager.Instance.boids.Remove(this._owner);
-            }
+
         }
 
+        public override bool CheckStateChanges()
+        {
+            if (_distToPlayer < _owner.enemyData.AttackRadius)
+            {
+                Parent.ChangeState(postChaseState.GetType());
+                return true;
+            }
+            return false;
+        }
         public override void Tick(float deltaTime)
         {
             _chaseTarget = Player.Instance.transform;
             _distToPlayer = Vector3.Distance(_owner.transform.position, _chaseTarget.position);
+            
+            if (!_nearby && _distToPlayer <= _owner.enemyData.NearbyRadius)
+            {
+                _nearby = true;
+                _onNearby.Raise(_owner.gameObject);
+            }
+            else if (_nearby && _distToPlayer > _owner.enemyData.NearbyRadius)
+            {
+                _nearby = false;
+                _onNotNearby.Raise(_owner.gameObject);
+            }
 
             if (!_owner.isBoid)
             {
                 _owner.LookTowards();
-                // _owner.navMeshAgent.SetDestination(_chaseTarget.position);
-                // _owner.navMeshAgent.speed = _owner.enemyData.WalkSpeed * _owner.enemyData.MovementModifier;
-                // _owner.navMeshAgent.angularSpeed = _owner.enemyData.RotationSpeed * _owner.enemyData.MovementModifier;
             }
         }
 
-        #region helperFunctions
+        #region boidHelperFunctions
         public void UpdateBoid()
         {
             Vector3 acceleration = Vector3.zero;

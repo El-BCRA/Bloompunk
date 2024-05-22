@@ -10,7 +10,7 @@ namespace Bloompunk
     {
         public static BoidManager Instance;
 
-        const int threadGroupSize = 1024;
+        const int threadGroupSize = 256;
 
         // public MeleeChaserData settings;
         public ComputeShader compute;

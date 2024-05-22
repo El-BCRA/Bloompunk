@@ -32,7 +32,6 @@ namespace Bloompunk
             // Disable NavMesh agent & enable physics on the rigidBody
             // _owner.navMeshAgent.enabled = false;
             _owner.enemyRigidBody.isKinematic = false;
-            _owner.enemyRigidBody.constraints = RigidbodyConstraints.FreezeRotationZ | RigidbodyConstraints.FreezeRotationX;
             _inHitStun = false;
             _hasCompletedStun = false;
         }
@@ -40,7 +39,6 @@ namespace Bloompunk
         public override void Exit()
         {
             // _owner.navMeshAgent.enabled = true;
-            _owner.enemyRigidBody.constraints = RigidbodyConstraints.None;
             _owner.enemyRigidBody.isKinematic = true;
         }
 

@@ -13,27 +13,18 @@ namespace Bloompunk
     {
         #region variables
         [SerializeField] private AState<Enemy> postAttackState;
-        [SerializeField] public ProjectileData enemyMissileData;
         [SerializeField] private bool _usesLockSights;
 
         [SerializeField] private GameObjectGameEvent _onStartCharge;
-        [SerializeField] private GameObjectGameEvent _onLaunchAttack;
 
-        private float _lockOnTimer = 0.0f;
+        [SerializeField] RaycastData lockOnVFX;
+        [HideInInspector] public float lockOnTimer = 0.0f;
+        [HideInInspector] public float delayTimer = 0.0f;
         private bool _isAttacking;
         private bool _hasAttacked;
         private float _attackAnimLength;
+        private IEnumerator _shrinkRoutine;
         #endregion
-
-        public override bool CheckStateChanges()
-        {
-            if (_hasAttacked)
-            {
-                Parent.ChangeState(postAttackState.GetType());
-                return true;
-            }
-            return false;
-        }
 
         public override void Enter()
         {
@@ -47,17 +38,58 @@ namespace Bloompunk
         {
             if (_usesLockSights && (_isAttacking && !_hasAttacked))
             {
+                StopVFX();
                 _owner.InterruptAttack();
+                _owner.StopAllCoroutines();
+            } else if (_usesLockSights)
+            {
+                StopVFX();
+                _owner.animator.ResetTrigger("IsCharging");
+                _owner.animator.ResetTrigger("IsAttacking");
+                _owner.animator.ResetTrigger("HasAttacked");
+                _owner.animator.ResetTrigger("ChargeInterrupt");
             }
-            // Make sure animation is finished playing, I assume
+        }
+
+        public override bool CheckStateChanges()
+        {
+            float distToPlayer = Vector3.Distance(_owner.transform.position, Player.Instance.transform.position);
+            if (distToPlayer <= _owner.enemyData.FleeRadius)
+            {
+                _owner.FindEscapeRoute();
+                if (_owner.storedEscapeRoute.destination is not null && _owner.storedEscapeRoute.destination.myEnemy is null)
+                {
+                    _owner._onRangedSniperStartJumpAnim.Raise(_owner.gameObject);
+                    _owner.animator.SetTrigger("IsJumping");
+                    return true;
+                } else
+                {
+                    return false;
+                }
+            }
+            else if (_hasAttacked || distToPlayer > _owner.enemyData.AttackRadius)
+            {
+                Parent.ChangeState(postAttackState.GetType());
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         public override void Tick(float deltaTime)
         {
+            _owner.LookTowards();
             if (!_isAttacking && !_hasAttacked)
             {
                 if (_usesLockSights)
                 {
+                    _isAttacking = true;
+                    _owner.animator.ResetTrigger("IsCharging");
+                    _owner.animator.ResetTrigger("IsAttacking");
+                    _owner.animator.ResetTrigger("HasAttacked");
+                    _owner.animator.ResetTrigger("ChargeInterrupt");
                     _owner.StartStateCoroutine(LockOnAttack());
                 } else
                 {
@@ -68,8 +100,7 @@ namespace Bloompunk
 
         public IEnumerator Attack()
         {
-            _isAttacking = true;
-            _onLaunchAttack.Raise(_owner.gameObject);
+            _owner._onLaunchAttack.Raise(_owner.gameObject);
             while (PauseManager.Instance.Paused)
             {
                 yield return null;
@@ -86,67 +117,159 @@ namespace Bloompunk
 
         public IEnumerator LockOnAttack()
         {
+            lockOnTimer = 0.0f;
             _isAttacking = true;
             RaycastHit objectHit;
             Vector3 toPlayer = Player.Instance.transform.position - _owner.transform.position;
 
             _onStartCharge.Raise(_owner.gameObject);
+            _owner.animator.SetTrigger("IsCharging");
+            // _owner.animator.Play("Charge");
+            StartChargeVFX();
 
             // Loop until the sniper has kept the player in LOS for LockOnDelay seconds
-            while (_lockOnTimer <= _owner.enemyData.LockOnDelay)
+            while (lockOnTimer <= _owner.enemyData.LockOnDelay)
             {
-                _owner.LookTowards();
-                // do a visibility raycast
-                toPlayer = Player.Instance.CameraHolder.transform.position - _owner.transform.position;
-                if (Physics.Raycast(_owner.transform.position, toPlayer, out objectHit, _owner.enemyData.AttackRadius))
+                if (!PauseManager.Instance.Paused)
                 {
-                    // Only continute incrementing if the RayCast hits the player
-                    if (objectHit.transform.CompareTag("Player") && !PauseManager.Instance.Paused)
+                    StartChargeVFX();
+                    // do a visibility raycast
+                    toPlayer = Player.Instance.CameraHolder.transform.position - _owner._gunTip.position;
+                    if (Physics.Raycast(_owner._gunTip.position, toPlayer, out objectHit, _owner.enemyData.AttackRadius, LayerMask.GetMask("Player", "Ground", "Thornwall")))
                     {
-                        _lockOnTimer += Time.deltaTime;
-                        if (_lockOnTimer >= _owner.enemyData.LockOnDelay)
+                        // Only continute incrementing if the RayCast hits the player
+                        if (objectHit.transform.CompareTag("Player") && !PauseManager.Instance.Paused)
                         {
-                            break;
+                            delayTimer = 0.0f;
+                            lockOnTimer += Time.deltaTime;
+                            Vector3 bestPlaceToAim = Player.Instance.CameraHolder.transform.position;
+
+                            // THIS IS A MAGIC NUMBER REGARDING THE SNIPER AIMING LASER.
+                            // I AM AWARE THAT THIS IS POOR PRACTICE AND YET I WILL
+                            // STUBBORNLY CARRY ON DOWN THIS PATH TOWARDS RUIN - BCRA
+                            bestPlaceToAim.y -= 1.0f;
+                            AimingLaser(bestPlaceToAim);
+
+                            if (lockOnTimer >= _owner.enemyData.LockOnDelay)
+                            {
+                                StopVFX();
+                                _owner.animator.ResetTrigger("IsCharging");
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            delayTimer += Time.deltaTime;
+                            if (delayTimer > 0.5f)
+                            {
+                                // Debug.Log("Sniper has broken contact with player");
+                                lockOnTimer = 0.0f;
+                                _isAttacking = false;
+                                // _owner.StopCoroutine(_shrinkRoutine);
+                                _owner.InterruptAttack();
+                                StopVFX();
+                                _owner.animator.SetTrigger("ChargeInterrupt");
+                                break;
+                            }
                         }
                     }
-                    else
-                    {
-                        _lockOnTimer = 0.0f;
-                        _isAttacking = false;
-                        _owner.InterruptAttack();
-                        break;
-                    }
+                } else
+                {
+                    PauseVFX();
                 }
                 yield return null;
             }
 
             // Determine which breakpoint was triggered
-            if (_lockOnTimer >= _owner.enemyData.LockOnDelay)
+            if (lockOnTimer >= _owner.enemyData.LockOnDelay)
             {
-                // Enemy has locked-on and is launching attack
-                _onLaunchAttack.Raise(_owner.gameObject);
-
-                toPlayer = Player.Instance.CameraHolder.transform.position - _owner.transform.position;
-                ProjectileManager.Instance.SpawnProjectile(enemyMissileData, _owner.transform.position, toPlayer, toPlayer.normalized, _owner);
+                _owner.animator.SetTrigger("IsAttacking");
 
                 // Wrap the attackCooldown in "pause-menu catchers"
                 while (_owner.ShouldPauseCoroutines())
                 {
+                    PauseVFX();
                     yield return null;
                 }
+                StartChargeVFX();
                 yield return new WaitForSeconds(_owner.enemyData.AttackCooldown);
                 while (_owner.ShouldPauseCoroutines())
                 {
+                    PauseVFX();
                     yield return null;
                 }
+                StartChargeVFX();
 
-                // Lets the tick function know that the enemy is free to attack again
+                Parent.ChangeState(postAttackState.GetType());
                 _isAttacking = false;
                 _hasAttacked = true;
-            } else
-            {
-                _isAttacking = false;
             }
+        }
+
+        void StartChargeVFX()
+        {
+            Transform muzzleVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleChargeSniper");
+            foreach (Transform child in muzzleVFX)
+            {   
+                if (!child.GetComponent<ParticleSystem>().isPlaying)
+                {
+                    child.GetComponent<ParticleSystem>().Play();
+                }
+            }
+        }
+
+        public void StartShootVFX()
+        {
+            Transform shootVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleSniperShot");
+            foreach (Transform child in shootVFX)
+            {
+                if (!child.GetComponent<ParticleSystem>().isPlaying)
+                {
+                    child.GetComponent<ParticleSystem>().Play();
+                }
+            }
+        }
+
+        void PauseVFX()
+        {
+            Transform muzzleVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleChargeSniper");
+            foreach (Transform child in muzzleVFX)
+            {
+                child.GetComponent<ParticleSystem>().Pause();
+            }
+
+            Transform shootVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleSniperShot");
+            foreach (Transform child in shootVFX)
+            {
+                child.GetComponent<ParticleSystem>().Pause();
+            }
+        }
+
+        public void StopVFX()
+        {
+            Transform muzzleVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleChargeSniper");
+            foreach (Transform child in muzzleVFX)
+            {
+                child.GetComponent<ParticleSystem>().Stop();
+            }
+
+            Transform shootVFX = _owner.transform.Find("RIG_SniperbugRetopology/Bug_Gun/GunTip/vfx_MuzzleSniperShot");
+            foreach (Transform child in shootVFX)
+            {
+                child.GetComponent<ParticleSystem>().Stop();
+            }
+        }
+
+        void AimingLaser(Vector3 aimPoint)
+        {
+            GameObject bulletTrailEffect = Instantiate(lockOnVFX.trail.gameObject, _owner._gunTip.position, Quaternion.identity);
+
+            LineRenderer lineR = bulletTrailEffect.GetComponent<LineRenderer>();
+
+            lineR.SetPosition(0, _owner._gunTip.position);
+            lineR.SetPosition(1, aimPoint);
+
+            Destroy(bulletTrailEffect, Time.deltaTime);
         }
     }
 }

@@ -14,18 +14,6 @@ namespace Bloompunk
         [SerializeField] private AState<Enemy> postIdleState;
         private float _distToPlayer;
 
-        public override bool CheckStateChanges()
-        {
-            _distToPlayer = Vector3.Distance(_owner.transform.position, Player.Instance.transform.position);
-
-            if (_distToPlayer <= _owner.enemyData.AlertRadius)
-            {
-                Parent.ChangeState(postIdleState.GetType());
-                return true;
-            }
-            return false;
-        }
-
         public override void Enter()
         {
             _owner = Parent.GetOwner();
@@ -37,9 +25,32 @@ namespace Bloompunk
 
         }
 
+        public override bool CheckStateChanges()
+        {
+            _distToPlayer = Vector3.Distance(_owner.transform.position, Player.Instance.transform.position);
+
+            // Account for the potential case where an enemy transitions directly from Idle to Flee
+            if (_distToPlayer <= _owner.enemyData.FleeRadius)
+            {
+                _owner.FindEscapeRoute();
+                if (_owner.storedEscapeRoute.destination is not null)
+                {
+                    _owner._onRangedSniperStartJumpAnim.Raise(_owner.gameObject);
+                    _owner.animator.SetTrigger("IsJumping");
+                    return true;
+                }
+            }
+            else if (_distToPlayer <= _owner.enemyData.AttackRadius)
+            {
+                Parent.ChangeState(postIdleState.GetType());
+                return true;
+            }
+            return false;
+        }
+
         public override void Tick(float deltaTime)
         {
-            // Any idle animations or behaviors go here
+            _owner.LookTowards();
         }
     }
 }

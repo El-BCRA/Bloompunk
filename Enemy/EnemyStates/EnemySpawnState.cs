@@ -12,14 +12,41 @@ namespace Bloompunk
     public class EnemySpawnState : AState<Enemy>
     {
         [SerializeField] private GameObject _meleeChaserPrefab;
-        [SerializeField] private List<Vector3> _spawnLocations;
-        [SerializeField] private float _spawnAnimLength;
+        [SerializeField] private List<Transform> _spawnLocations;
         [SerializeField] private float _spawnAmount = 2.0f;
-
         [SerializeField] private GameObjectGameEvent _onStartSpawnAnimation;
+        private float initialSpawnDelayAmount;
+        private float initialSpawnDelay = 0.0f;
+        private float spawnTimer = 0.0f;
 
         private bool _isSpawning;
         private bool _hasSpawned;
+        [HideInInspector] public bool canSpawn = true;
+
+        public override void Enter()
+        {
+            initialSpawnDelayAmount = UnityEngine.Random.Range(3.0f, 6.0f);
+            _owner = Parent.GetOwner();
+            _spawnLocations.Clear();
+            Transform spawnpoints = _owner.transform.Find("Spawnpoints");
+            for (int i = 0; i < spawnpoints.childCount; i++)
+            {
+                _spawnLocations.Add(spawnpoints.GetChild(i));
+            }
+            _isSpawning = false;
+            _hasSpawned = false;
+        }
+
+        public override void Exit()
+        {
+            StopVFX();
+            _spawnLocations.Clear();
+            if (_isSpawning && !_hasSpawned)
+            {
+                _owner._onSpawnInterrupt.Raise(_owner.gameObject);
+            }
+            // Make sure animation is finished playing, I assume
+        }
 
         public override bool CheckStateChanges()
         {
@@ -31,82 +58,114 @@ namespace Bloompunk
             return false;
         }
 
-        public override void Enter()
-        {
-            _owner = Parent.GetOwner();
-            _hasSpawned = false;
-            _isSpawning = false;
-            _spawnAnimLength = _owner.enemyData.AttackCooldown;
-
-            _spawnLocations.Add(new Vector3(_owner.transform.position.x + 2.0f, _owner.transform.position.y, _owner.transform.position.z + 2.0f));
-            _spawnLocations.Add(new Vector3(_owner.transform.position.x - 2.0f, _owner.transform.position.y, _owner.transform.position.z + 2.0f));
-            _spawnLocations.Add(new Vector3(_owner.transform.position.x + 2.0f, _owner.transform.position.y, _owner.transform.position.z - 2.0f));
-            _spawnLocations.Add(new Vector3(_owner.transform.position.x - 2.0f, _owner.transform.position.y, _owner.transform.position.z - 2.0f));
-        }
-
-        public override void Exit()
-        {
-            _spawnLocations.Clear();
-            if (_isSpawning && !_hasSpawned)
-            {
-                _owner._onSpawnInterrupt.Raise(_owner.gameObject);
-            }
-            // Make sure animation is finished playing, I assume
-        }
-
         public override void Tick(float deltaTime)
         {
+            spawnTimer += deltaTime;
+            if (initialSpawnDelay < initialSpawnDelayAmount)
+            {
+                initialSpawnDelay += deltaTime;
+                StopVFX();
+            } 
+            else
+            {
+                if (canSpawn && !_isSpawning)
+                {
+                    StartWindupVFX();
+                }
+            }
             // Call LookTowards() unless the enemy is in SpawnCooldown
             // (AKA, _hasSpawned && !_isSpawning, which is not an accesible 
             // variable state in the current implementation)
-            if (!_isSpawning && !_hasSpawned)
+            _owner.LookTowards();
+            if (EnemyManager.Instance.numEnemies < SpawnManager.Instance.currentEnemyLevelData.enemyLimit
+                && canSpawn && initialSpawnDelay >= initialSpawnDelayAmount && !_isSpawning && !_hasSpawned && EnemyManager.Instance.numChasers 
+                < LevelManager.Instance.currentLevelData.enemyConfiguration.maxChasers  && spawnTimer > _owner.enemyData.AttackCooldown)
             {
-                _owner.LookTowards();
-                _owner.StartStateCoroutine(SpawnAnimation());
-            }
-            else if (_isSpawning && !_hasSpawned)
-            {
-                _owner.LookTowards();
+                canSpawn = false;
+                _onStartSpawnAnimation.Raise(_owner.gameObject);
+                _isSpawning = true;
+                _owner.PlayAnimation("Spawning");
+                // _owner.StartStateCoroutine(SpawnAnimation());
             }
         }
 
         public void Spawn()
         {
-            List<Vector3> spawnLocations = new List<Vector3>(_spawnLocations);
+            StopVFX();
             int spawnIndex;
             // Magic number that can be made adjustable depending on future changes to
             // enemy-spawning difficulty scaling
             for (int i = 0; i < _spawnAmount; i++)
             {
-                spawnIndex = Random.Range(0, spawnLocations.Count);
-                Vector3 facing = spawnLocations[spawnIndex] - _owner.transform.position;
-                GameObject newEnemy = Instantiate(_meleeChaserPrefab, spawnLocations[spawnIndex], Quaternion.LookRotation(facing));
-                spawnLocations.RemoveAt(spawnIndex);
+                spawnIndex = Random.Range(0, _spawnLocations.Count);
+                Vector3 facing = _spawnLocations[spawnIndex].transform.position - _owner.transform.position;
+                StartSpawnVFX();
+                GameObject newEnemy = Instantiate(_meleeChaserPrefab, _spawnLocations[spawnIndex].transform.position, Quaternion.LookRotation(facing));
+                _spawnLocations.RemoveAt(spawnIndex);
+                // _owner.transform.localScale = _owner._spawnStartPoint;
+            }
+            _hasSpawned = true;
+            _isSpawning = false;
+            spawnTimer = 0.0f;
+        }
+
+        public void StartWindupVFX()
+        {
+            Transform windupVFX = _owner.transform.Find("vfx_SpawnerWindup");
+            foreach (Transform child in windupVFX)
+            {
+                if (!child.GetComponent<ParticleSystem>().isEmitting || !child.GetComponent<ParticleSystem>().isPlaying)
+                {
+                    child.GetComponent<ParticleSystem>().Play();
+                }
             }
         }
 
-        // Spawn occurs after animation has played to telegraph
-        // the interaction to the player
-        public IEnumerator SpawnAnimation()
+        public void StartSpawnVFX()
         {
-            _onStartSpawnAnimation.Raise(_owner.gameObject);
-            _isSpawning = true;
-
-            // Wrap the spawnAnimation in "pause-menu catchers"
-            while (PauseManager.Instance.Paused)
+            Transform spawnVFX = _owner.transform.Find("vfx_SpawnerPlopingChasersOut");
+            foreach (Transform child in spawnVFX)
             {
-                yield return null;
+                if (!child.GetComponent<ParticleSystem>().isEmitting || !child.GetComponent<ParticleSystem>().isPlaying)
+                {
+                    child.GetComponent<ParticleSystem>().Play();
+                }
             }
-            yield return new WaitForSeconds(_spawnAnimLength);
-            while (PauseManager.Instance.Paused)
-            {
-                yield return null;
-            }
-            Spawn();
+        }
 
-            // Lets the tick function know that the enemy is free to spawn again
-            _isSpawning = false;
-            _hasSpawned = true;
+        public void PauseVFX()
+        {
+            Transform windupVFX = _owner.transform.Find("vfx_SpawnerWindup");
+            foreach (Transform child in windupVFX)
+            {
+                child.GetComponent<ParticleSystem>().Pause();
+            }
+
+            Transform spawnVFX = _owner.transform.Find("vfx_SpawnerPlopingChasersOut");
+            foreach (Transform child in spawnVFX)
+            {
+                child.GetComponent<ParticleSystem>().Pause();
+            }
+        }
+
+        public void StopChargeVFX()
+        {
+            Transform windupVFX = _owner.transform.Find("vfx_SpawnerWindup");
+            foreach (Transform child in windupVFX)
+            {
+                child.GetComponent<ParticleSystem>().Stop();
+            }
+        }
+
+        public void StopVFX()
+        {
+            StopChargeVFX();
+
+            Transform spawnVFX = _owner.transform.Find("vfx_SpawnerPlopingChasersOut");
+            foreach (Transform child in spawnVFX)
+            {
+                child.GetComponent<ParticleSystem>().Stop();
+            }
         }
     }
 }

@@ -85,7 +85,6 @@ namespace Bloompunk
                 slamIndicator.transform.localScale = Vector3.Lerp(defaultScale, targetScale, percentComplete);
                 yield return new WaitForSeconds(0);
             }
-            Debug.Log("done");
             
         }
 
