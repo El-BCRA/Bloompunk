@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7fa3ee63f873cee4e81f47c0ad0ad5cd, type: 3}
+  m_Name: SpawnerSpawnState_Medium
+  m_EditorClassIdentifier: 
+  _meleeChaserPrefab: {fileID: 8261321836954577349, guid: 889b665c7b7df2c4590d268ebfc15c62,
+    type: 3}
+  _spawnLocations: []
+  _spawnAmount: 1
+  _onStartSpawnAnimation: {fileID: 11400000, guid: 85ca4ba1e70566a4bbcbd5a8c248e81f,
+    type: 2}
+  canSpawn: 1

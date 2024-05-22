@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b92c8ea4603b7eb469786a62e887891b, type: 3}
+  m_Name: RangedSniperAttack_Hard
+  m_EditorClassIdentifier: 
+  postAttackState: {fileID: 11400000, guid: 64f6b5cbf0e23654f9ee7396e576e1c1, type: 2}
+  enemyMissileData: {fileID: 11400000, guid: eea2a64c10963b34a902f1698f83daa6, type: 2}
+  _usesLockSights: 1
+  _gunTip: {fileID: 0}
+  _onStartCharge: {fileID: 11400000, guid: 2e43e55c07265b24682302915209d758, type: 2}
+  _onLaunchAttack: {fileID: 11400000, guid: dd43e96b2ac0c6746bad330dbd8e709d, type: 2}
+  lockOnVFX: {fileID: 11400000, guid: 1426f52d692f7b349ae4549096ccc7a9, type: 2}
+  lockOnTimer: 0
